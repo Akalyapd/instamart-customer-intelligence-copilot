@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+*.pyc
+backup_before_agent_rerun/
+src/agent_backup.py

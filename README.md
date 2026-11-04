@@ -1,0 +1,410 @@
+# Instamart Customer Intelligence & Support Copilot
+
+## Overview
+
+This project builds a customer intelligence and support copilot for a fictional quick-commerce platform called Instamart.
+
+The project uses synthetic customer, product, order and support ticket data to demonstrate data cleaning, SQL analysis, customer segmentation, lapse prediction, support ticket classification, policy-based Retrieval-Augmented Generation (RAG), and a tool-using AI agent.
+
+All data is fictional, and all monetary values are represented in Indian Rupees (INR).
+
+The project is developed as part of the IIT Patna and Masai School Applied Artificial Intelligence and Machine Learning programme.
+
+## Reproduce
+
+The complete reproduction instructions, including environment setup, dependency installation, data generation and execution of all project scripts, will be documented after the implementation of Parts A–D is complete.
+
+## Part A – Data Foundation
+
+### 1. Data Audit and Cleaning
+
+Audited the raw customer, product and order datasets to identify missing values, duplicates, invalid entries and inconsistent data.
+
+- Cleaned customer records by handling missing and invalid ages, standardising gender values and resolving city-name variations.
+- Converted order timestamps into datetime format.
+- Removed exact duplicate orders and retained the latest record for each order ID.
+- Converted order amounts into numeric values and imputed invalid amounts using product price, quantity and discount.
+- Replaced negative delivery times with missing values.
+- Imputed missing delivery times for completed orders using the median delivery time for the corresponding product category.
+- Preserved missing delivery times for cancelled orders.
+
+### 2. Database and SQL Analysis
+
+Stored the cleaned customer, product and order datasets in an SQLite database.
+
+Implemented seven SQL queries covering:
+
+- High-value completed orders.
+- Revenue by city and product category.
+- Products priced above the average catalogue price.
+- Customers without completed orders.
+- Customers spending above the average.
+- Customer ranking within each city using window functions.
+- Daily revenue with a cumulative running total.
+
+### 3. Pandas Analysis and SQL Cross-Validation
+
+Used Pandas to merge cleaned datasets, analyse completed orders and calculate revenue summaries.
+
+Created a pivot table to compare revenue by city and product category. The total revenue calculated using Pandas matched the SQL result.
+
+- Total completed-order revenue: **₹2,998,668.80**
+
+### 4. Statistical Analysis
+
+Analysed completed order amounts using descriptive statistics, the IQR method and correlation.
+
+- Mean order amount: ₹269.91
+- Median order amount: ₹135.00
+- Skewness: 4.609
+- First quartile (Q1): ₹64.80
+- Third quartile (Q3): ₹297.00
+- Interquartile range (IQR): ₹232.20
+- Lower fence: -₹283.50
+- Upper fence: ₹645.30
+- Potential outliers: 897
+
+### 5. Interpretation
+
+Completed order amounts have a mean of ₹269.91 and a median of ₹135.00, indicating that the distribution is strongly right-skewed.
+
+The positive skewness of 4.609 suggests that a relatively small number of high-value orders pull the mean above the median.
+
+The IQR method identifies 897 potential outliers above the upper fence of ₹645.30, with no observations below the lower fence. These high-value orders may represent genuine purchases rather than data errors.
+
+The correlation analysis shows only weak linear relationships among order amount, discount percentage, quantity and delivery time.
+
+The strongest absolute correlation is a weak negative relationship between discount percentage and order amount (-0.095).
+
+
+## Part B: Customer Segmentation and Lapse Prediction
+
+### 1. RFM Analysis
+
+RFM analysis was performed using completed orders and a snapshot date of `2025-10-01`.
+
+The three metrics were calculated as follows:
+- **Recency:** Number of days since the customer's most recent completed order.
+- **Frequency:** Number of distinct completed orders.
+- **Monetary:** Total amount spent on completed orders (INR).
+
+A total of 1,175 customers with at least one completed order were included.
+
+### 2. K-Means Customer Segmentation
+
+The RFM features were standardized using `StandardScaler`. K-Means models were evaluated for K values from 2 to 8 using `n_init=10` and `random_state=42`.
+
+The selected number of clusters was **K=4**, based on the silhouette score, inertia and business interpretability.
+
+| K | Inertia | Silhouette Score |
+|---:|---:|---:|
+| 2 | 1820.76 | 0.4650 |
+| 3 | 1268.23 | 0.4452 |
+| 4 | 743.07 | 0.5255 |
+| 5 | 617.37 | 0.4805 |
+| 6 | 503.17 | 0.4819 |
+| 7 | 408.46 | 0.4163 |
+| 8 | 366.50 | 0.4123 |
+
+Inertia decreases as K increases, so it cannot be used alone to select the best number of clusters. K=4 achieved the highest silhouette score among the evaluated values.
+
+#### Segment Profiles
+
+| Segment | Customers | Mean Recency | Mean Frequency | Mean Monetary (₹) | Segment Name |
+|---:|---:|---:|---:|---:|---|
+| 0 | 436 | 28.86 | 3.77 | 1,057.62 | Occasional Customers |
+| 1 | 138 | 24.12 | 6.77 | 7,129.70 | Premium Customers |
+| 2 | 419 | 8.77 | 19.40 | 3,410.02 | Loyal Regulars |
+| 3 | 182 | 109.04 | 2.20 | 685.99 | At-Risk Customers |
+
+**Recommended business actions:**
+- Occasional Customers: Encourage repeat purchases through targeted offers.
+- Premium Customers: Provide loyalty rewards and personalized retention campaigns.
+- Loyal Regulars: Maintain engagement and strengthen loyalty.
+- At-Risk Customers: Use reactivation campaigns to encourage repeat purchases.
+
+Premium Customers were identified as the segment with the highest mean monetary value.
+
+#### PCA
+
+PCA was applied to the standardized RFM features for two-dimensional representation.
+
+- First component explained variance: 63.43%
+- Second component explained variance: 21.80%
+- Total explained variance: 85.23%
+
+The two components retain approximately 85.23% of the variance in the standardized RFM data.
+
+The resulting customer segments were saved in `outputs/customer_segments.csv`.
+
+### 3. Customer Lapse Prediction
+
+The lapse prediction cohort included customers with at least one completed order before `2025-09-01`.
+
+The prediction window was `2025-09-01` to `2025-10-01`.
+
+A customer was labelled as lapsed if they did not place a completed order during this window.
+
+- Total customers: 1,156
+- Not lapsed: 713 (61.68%)
+- Lapsed: 443 (38.32%)
+
+#### Feature Engineering
+
+The following features were calculated using only information available before the cutoff date:
+
+- Recency, frequency and monetary value
+- Average discount percentage
+- Cancellation rate
+- Average delivery time
+- Favourite product category
+- City, age and gender
+- Customer tenure in days
+
+No orders from the lapse-label window were used to construct model features. Customer segment labels were also excluded from the prediction features.
+
+#### Preprocessing
+
+Numerical features were standardized using `StandardScaler`. Categorical features (city, gender and favourite category) were encoded using `OneHotEncoder(drop="first")`.
+
+Preprocessing was performed within model pipelines, with fitting restricted to training data.
+
+The training-set frequency mean after fitting the scaler was 8.115, while the full-cohort mean was 8.029. The difference occurs because the scaler was fitted using only the training subset rather than the entire cohort.
+
+No missing feature values were found in the training or testing data after feature engineering.
+
+#### Model Training and Evaluation
+
+The data was divided into training and testing sets using an 80:20 stratified split and `random_state=42`.
+
+A baseline model predicting every customer as not lapsed achieved 61.64% accuracy and an F1-score of 0 for the lapsed class.
+
+Two models were tuned using five-fold cross-validation with F1-score as the scoring metric.
+
+**Logistic Regression**
+- Best C: 100
+- Best cross-validation F1: 0.6506
+- Test accuracy: 0.7284
+- Lapsed-class precision: 0.64
+- Lapsed-class recall: 0.65
+- Lapsed-class F1: 0.6480
+
+**Random Forest**
+- Best maximum depth: 8
+- Best minimum samples per leaf: 10
+- Best cross-validation F1: 0.6811
+- Test accuracy: 0.7371
+- Lapsed-class precision: 0.66
+- Lapsed-class recall: 0.65
+- Lapsed-class F1: 0.6554
+
+Random Forest was selected as the final model because it achieved slightly better cross-validation and test F1-scores and produced fewer false positives than Logistic Regression.
+
+#### Oversampling Experiment
+
+The training data initially contained 570 not-lapsed customers and 354 lapsed customers.
+
+Random oversampling with replacement was applied only to the training data, increasing the lapsed class to 570. The test set was left unchanged.
+
+The Logistic Regression model was refitted using the balanced training data.
+
+| Lapsed-class metric | Before Oversampling | After Oversampling |
+|---|---:|---:|
+| Precision | 0.64 | 0.59 |
+| Recall | 0.65 | 0.85 |
+| F1-score | 0.65 | 0.70 |
+
+Oversampling improved recall from 0.65 to 0.85, identifying more lapsed customers. However, precision decreased to 0.59 because more loyal customers were incorrectly flagged. This demonstrates the trade-off between identifying more at-risk customers and avoiding unnecessary retention campaigns.
+
+#### Feature Importance and Interpretation
+
+The five most important Random Forest features were:
+
+| Feature | Importance |
+|---|---:|
+| Frequency | 0.2796 |
+| Monetary | 0.2712 |
+| Recency | 0.1151 |
+| Average delivery time | 0.0613 |
+| Cancellation rate | 0.0523 |
+
+Frequency and monetary value were the two most influential features in the Random Forest model.
+
+The three largest-magnitude Logistic Regression coefficients were negative:
+- Frequency: -1.6982
+- Favourite category – Electronics: -1.1367
+- Favourite category – Grocery: -0.4487
+
+Negative coefficients indicate an association with lower log-odds of being lapsed, relative to the relevant reference category for categorical features.
+
+#### Model Persistence and Retention List
+
+The selected Random Forest pipeline was saved to `outputs/lapse_model.joblib` using joblib.
+
+The saved model was reloaded and tested. Its predictions matched the original model's predictions exactly.
+
+A retention list of the top 10 Premium customers ranked by predicted lapse probability was saved to `outputs/retention_list.csv`. One customer in this list was actually lapsed during the label window.
+
+The retention list is intended as an illustrative prioritisation output rather than a leakage-free evaluation, because Premium segment membership was calculated using RFM data through September 30, which overlaps with the lapse-label window.
+
+## Part C — Support Ticket Triage Copilot
+
+### 1. Data Processing and Privacy
+
+Processed all 164 synthetic support tickets.
+
+- Redacted 55 email addresses, 91 phone numbers and 132 order IDs.
+- Total PII redactions: 278.
+- Empty tickets: 4 (`skipped_empty`).
+- Long tickets exceeding 400 estimated tokens: 4 (`flagged_long`).
+- Verified that no original email addresses, phone numbers or order IDs remained in the redacted ticket text.
+
+Only the redacted ticket text was passed as the model's user message.
+
+### 2. Prompting and Response Validation
+
+Implemented zero-shot and few-shot prompts for four categories:
+
+- Billing
+- Delivery
+- Technical
+- Fraud
+
+Responses were validated as JSON. Invalid JSON was checked for exactly one allowed category keyword. Responses that could not be validated were marked `flagged_invalid_output` and sent for human review.
+
+Final classification status:
+
+| Status | Tickets |
+|---|---:|
+| classified_json | 135 |
+| classified_keyword | 12 |
+| flagged_invalid_output | 9 |
+| skipped_empty | 4 |
+| flagged_long | 4 |
+| **Total** | **164** |
+
+### 3. Retry Handling
+
+Implemented up to three retries with exponential backoff and jitter for transient LLM errors.
+
+All 19 transient errors per full run were recovered successfully.
+
+### 4. Zero-Shot vs Few-Shot Evaluation
+
+| Metric | Zero-shot | Few-shot |
+|---|---:|---:|
+| Classified tickets | 147 | 147 |
+| Correct predictions | 126 | 147 |
+| Accuracy | 85.7% | 100% |
+| Total tokens | 9,088 | 15,796 |
+| Tokens per classified ticket | 61.8 | 107.5 |
+
+The zero-shot prompt misclassified 11 fraud tickets and 10 technical tickets as billing. Few-shot examples corrected these errors in the mock evaluation. Although few-shot prompting required 6,708 additional tokens, it improved accuracy by 14.3 percentage points.
+
+These results reflect the deterministic synthetic mock LLM and should not be interpreted as expected real-world model performance.
+
+### 5. Token Budget Demonstration
+
+Ran zero-shot classification with a 6,000-token budget.
+
+- Total tokens used: 6,018.
+- 53 tickets were marked `budget_exhausted`.
+- No further model calls were made once the running token total reached or exceeded the budget.
+
+The final permitted call started while the running total was below the budget, explaining the small overshoot.
+
+### 6. Final Ticket Routing
+
+Ran the few-shot pipeline with a 100,000-token budget.
+
+| Route | Tickets |
+| :--- | ---: |
+| support_queue | 102 |
+| security_team | 34 |
+| human_review | 17 |
+| premium_desk | 11 |
+| **Total** | **164** |
+
+Fraud tickets were routed to the security team with HIGH priority. Premium customers with other valid classifications were routed to the premium desk with HIGH priority. Invalid, empty, long and budget-exhausted tickets were routed to human review with NORMAL priority.
+
+### 7. Output Files
+
+The following output files were generated:
+
+- `outputs/triage_results.csv`
+- `outputs/triage_budget_demo.csv`
+
+The final triage CSV contains 164 rows and exactly eight required columns: `ticket_id`, `customer_id`, `status`, `category`, `segment_name`, `priority`, `route`, and `tokens_used`.
+
+Tickets with invalid or unavailable classifications were not automatically guessed; they were routed for human review.
+## Part D � Policy RAG and Refund Agent
+
+### 1. Policy Knowledge Base and Retrieval
+
+Implemented a policy retrieval system using the synthetic policy documents.
+
+The policy knowledge base contains 15 chunks from five policy documents:
+
+- Delivery policy
+- Escalation policy
+- Payment policy
+- Privacy policy
+- Refund policy
+
+The agent retrieves relevant policy information to support customer queries and refund decisions.
+
+### 2. Refund Agent and Tool Execution
+
+Implemented a tool-based Refund Agent in `src/agent.py`.
+
+The agent supports:
+
+- Order lookup
+- Policy search
+- Refund eligibility calculation
+- Refund issuance
+- Escalation to human support
+
+The agent uses the mock LLM implementation in `mock_llm.py` for deterministic evaluation.
+
+### 3. Checkpointing and Resume
+
+Implemented checkpoint saving to preserve agent execution state, including conversation messages, executed steps, LLM calls and token usage.
+
+Tested resuming an agent from a saved checkpoint. The resumed agent continued from the recorded state and produced the expected final response without repeating the already-recorded refund operation.
+
+### 4. Refund Idempotency
+
+Added duplicate-refund protection to the refund ledger.
+
+- Repeated refund requests for the same order and amount do not create duplicate ledger entries.
+- A request for a different refund amount for an already-refunded order raises a validation error.
+
+Tested the new logic using an isolated temporary ledger.
+
+### 5. Scenario Evaluation
+
+Executed seven scenarios to evaluate refund decisions and agent behaviour.
+
+| Scenario | Expected behaviour | Observed result |
+| :--- | :--- | :--- |
+| S1 | Eligible refund | REFUND |
+| S2 | Eligible refund | REFUND |
+| S3 | Human escalation | ESCALATE |
+| S4 | Refund denied | DENIED |
+| S5 | Refund denied | DENIED |
+| S6 | Order not found | NOT_FOUND |
+| S7 | Fallback to human support | FALLBACK_MAX_ITERATIONS |
+
+The first six scenarios produced their expected outcomes. S7 reached the maximum iteration limit and returned a human-support fallback response.
+
+### 6. Output Files
+
+The following files contain the agent evaluation results and execution records:
+
+- `outputs/agent_runs.jsonl`
+- `outputs/refund_ledger.jsonl`
+- `state/` � saved agent checkpoints and test states
+
+The refund ledger records refund and escalation operations. The agent execution log stores the results of the seven evaluation scenarios.
+
