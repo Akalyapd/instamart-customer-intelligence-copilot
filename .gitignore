@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 backup_before_agent_rerun/
 src/agent_backup.py
+README_before_encoding_fix.md
