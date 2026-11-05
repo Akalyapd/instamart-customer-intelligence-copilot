@@ -137,8 +137,11 @@ Audited the raw customer, product and order datasets to identify missing values,
 
 #### Raw-data audit findings
 
-- Customers: 61 missing ages and 30 missing gender values.
-- Orders: 119 exact duplicate rows, 656 rows with repeated order IDs, 656 pending rows, 67 non-numeric order amounts, 53 missing order amounts, 2,541 missing delivery times and 106 negative delivery times.
+
+- Customers: 1,200 raw records, 61 missing ages, 6 ages outside the valid range of 10–100, and 30 missing gender values. The raw data contained 24 city spellings and 10 nonblank gender spellings that required standardisation.
+- Products: 40 raw product records.
+- Orders: 13,084 raw records, including 119 exact duplicate rows, 656 rows with repeated order IDs, and 656 pending rows. The order amounts contained 67 non-numeric values and 53 missing values (120 affected entries in total). There were also 2,541 missing delivery times and 106 negative delivery times. After cleaning and deduplication, 12,309 unique order records remained.
+
 
 #### Customer cleaning
 
@@ -430,6 +433,22 @@ Two models were tuned using five-fold cross-validation with F1-score as the scor
 - Lapsed-class F1: 0.6554
 
 
+#### Hyperparameter Tuning
+
+Hyperparameter tuning was performed using `GridSearchCV` for Logistic Regression and Random Forest.
+
+**Logistic Regression search grid:**
+
+- `C = [0.01, 0.1, 1, 10, 100]`
+
+**Random Forest search grid:**
+
+- `max_depth = [3, 5, 8]`
+- `min_samples_leaf = [5, 10, 20]`
+
+The hyperparameter search was performed on the training data without fitting preprocessing steps or resampling on the held-out test data.
+
+
 #### Confusion Matrices
 
 The confusion matrices were calculated on the untouched test set of 232 customers, comprising 143 not-lapsed and 89 lapsed customers.
@@ -487,7 +506,6 @@ The three largest-magnitude Logistic Regression coefficients were negative:
 - Frequency: -1.6982
 - Favourite category – Electronics: -1.1367
 - Favourite category – Grocery: -0.4487
-
 
 **Business Interpretation of Logistic Regression Coefficients**
 
@@ -703,19 +721,54 @@ The five supported tools are:
 
 During execution, the agent passes `TOOLS_SPEC` to `mock_llm.chat()` and uses `TOOL_MAP` to execute the requested Python function.
 
+
 #### ReAct vs Plan-and-Execute
 
-**ReAct (Reasoning and Acting):** The agent follows an iterative process in which the language model selects a tool, executes it, receives the observation and uses the updated conversation to determine the next action.
+**ReAct (Reasoning and Acting):** The agent repeatedly selects a tool, executes it, observes the result and decides its next action. This allows it to adapt to unexpected observations, such as an order not being found or a refund requiring escalation.
 
-**Plan-and-Execute:** The agent first creates a structured plan of actions and then executes the planned steps. This separates planning from execution.
+**Plan-and-Execute:** The agent first creates a structured plan and then executes the planned steps. This can reduce repeated planning, but unexpected observations may require revising the original plan.
 
-**Approach used in this project:** The Refund Agent follows a ReAct-style tool-execution loop. In `src/agent.py`, the agent repeatedly calls `mock_llm.chat()`, executes the requested tools through `TOOL_MAP`, adds tool observations to the conversation and continues until a final answer or safety fallback is reached.
+**Approach used in this project:** The Refund Agent implements a ReAct-style loop in `src/agent.py`, using `mock_llm.chat()` and `TOOL_MAP`. Each tool observation is added to the conversation before the next model call.
 
-This approach allows the agent to make decisions using the results of previous tool executions without requiring a separate planning stage.
+**Measured execution examples:**
+
+| Scenario | Result | LLM calls | Tokens used |
+|---|---|---:|---:|
+| S1 | REFUND | 5 | 1,609 |
+| S3 | ESCALATE | 5 | 1,596 |
+| S6 | NOT_FOUND | 2 | 343 |
+
+These measurements are from the implemented ReAct-style agent. Plan-and-Execute was discussed conceptually and was not separately implemented or benchmarked.
+
+ReAct was selected because the agent can use actual tool results to determine subsequent actions while enforcing refund limits and human escalation rules.
+
 
 ### 3. Checkpointing and Resume
 
 Implemented checkpoint saving to preserve agent execution state, including conversation messages, executed steps, LLM calls and token usage.
+
+
+#### S1 Crash-and-Resume Verification
+
+Demonstrated checkpoint recovery using scenario S1.
+
+The agent executed the following tools in order:
+
+1. `get_order`
+2. `search_policy`
+3. `calculate_refund`
+4. `issue_refund`
+
+A simulated crash occurred after the second tool execution, once the checkpoint had been saved.
+
+The resumed agent continued with the remaining tools without repeating earlier executions.
+
+- Total tool executions across crash and resume: 4
+- Final status: `REFUND`
+- Refund amount: INR 128.25
+
+The demonstration confirmed that checkpoint recovery preserves the agent's execution state and avoids duplicate tool executions.
+
 
 Tested resuming an agent from a saved checkpoint. The resumed agent continued from the recorded state and produced the expected final response without repeating the already-recorded refund operation.
 
@@ -732,15 +785,17 @@ Tested the new logic using an isolated temporary ledger.
 
 Executed seven scenarios to evaluate refund decisions and agent behaviour.
 
-| Scenario | Expected behaviour | Observed result |
-| :--- | :--- | :--- |
-| S1 | Eligible refund | REFUND |
-| S2 | Eligible refund | REFUND |
-| S3 | Human escalation | ESCALATE |
-| S4 | Refund denied | DENIED |
-| S5 | Refund denied | DENIED |
-| S6 | Order not found | NOT_FOUND |
-| S7 | Fallback to human support | FALLBACK_MAX_ITERATIONS |
+
+| Scenario | Expected behaviour | Observed result | Refund amount (INR) | LLM calls | Tokens used |
+|---|---|---|---:|---:|---:|
+| S1 | Eligible refund | REFUND | 128.25 | 5 | 1,609 |
+| S2 | Eligible refund | REFUND | 135.00 | 5 | 1,609 |
+| S3 | Human escalation | ESCALATE | 1,999.00 (escalated) | 5 | 1,596 |
+| S4 | Refund denied | DENIED | 0.00 | 4 | 1,165 |
+| S5 | Refund denied | DENIED | 0.00 | 3 | 749 |
+| S6 | Order not found | NOT_FOUND | 0.00 | 2 | 343 |
+| S7 | Fallback to human support | FALLBACK_MAX_ITERATIONS | 0.00 | 6 | 3,864 |
+
 
 The first six scenarios produced their expected outcomes. S7 reached the maximum iteration limit and returned a human-support fallback response.
 
@@ -778,4 +833,28 @@ The following files contain the agent evaluation results and execution records:
 - `state/` – saved agent checkpoints and test states
 
 The refund ledger records refund and escalation operations. The agent execution log stores the results of the seven evaluation scenarios.
+
+
+## Limitations and Next Steps
+
+### Limitations
+
+1. **Synthetic Data:** The project uses entirely synthetic customer, order, product and support ticket data. Results may not represent real customer behaviour or operational conditions.
+
+2. **Lapse Prediction:** The prediction model is trained on a limited synthetic dataset. Its performance may differ on real-world data. The retention list is illustrative because Premium segment membership uses information that overlaps with the lapse-label window.
+
+3. **Support Ticket Classification:** Ticket classification uses the supplied deterministic offline mock LLM. The observed few-shot accuracy of 100% should not be interpreted as expected performance on real customer tickets.
+
+4. **Policy Retrieval:** The TF-IDF retrieval system relies on lexical similarity rather than semantic understanding. The zero-overlap evaluation demonstrated that chunk boundaries can affect expected fact matching.
+
+5. **Refund Agent:** The refund agent operates on fictional orders and policies using an offline mock LLM. It is a demonstration system, not a production payment or refund service.
+
+### Next Steps
+
+1. Evaluate customer segmentation and lapse prediction using larger, more representative datasets.
+2. Improve model validation and ensure that customer prioritisation uses only information available at the prediction cutoff.
+3. Evaluate ticket classification with more varied customer messages and additional ambiguous cases.
+4. Explore semantic retrieval approaches and compare them with the existing TF-IDF implementation.
+5. Extend the refund agent with additional safety tests, monitoring and human-review workflows before considering real-world deployment.
+
 
