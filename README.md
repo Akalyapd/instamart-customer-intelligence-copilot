@@ -429,6 +429,28 @@ Two models were tuned using five-fold cross-validation with F1-score as the scor
 - Lapsed-class recall: 0.65
 - Lapsed-class F1: 0.6554
 
+
+#### Confusion Matrices
+
+The confusion matrices were calculated on the untouched test set of 232 customers, comprising 143 not-lapsed and 89 lapsed customers.
+
+**Logistic Regression**
+
+| Actual / Predicted | Not Lapsed | Lapsed |
+|---|---:|---:|
+| Not Lapsed | 111 | 32 |
+| Lapsed | 31 | 58 |
+
+**Random Forest**
+
+| Actual / Predicted | Not Lapsed | Lapsed |
+|---|---:|---:|
+| Not Lapsed | 113 | 30 |
+| Lapsed | 31 | 58 |
+
+Both models correctly identified 58 lapsed customers and missed 31. Random Forest produced 30 false positives compared with 32 for Logistic Regression, resulting in slightly better overall accuracy and precision.
+
+
 Random Forest was selected as the final model because it achieved slightly better cross-validation and test F1-scores and produced fewer false positives than Logistic Regression.
 
 #### Oversampling Experiment
@@ -466,7 +488,17 @@ The three largest-magnitude Logistic Regression coefficients were negative:
 - Favourite category – Electronics: -1.1367
 - Favourite category – Grocery: -0.4487
 
-Negative coefficients indicate an association with lower log-odds of being lapsed, relative to the relevant reference category for categorical features.
+
+**Business Interpretation of Logistic Regression Coefficients**
+
+- **Frequency (-1.6982):** Customers who place orders more frequently are associated with a lower likelihood of lapsing, holding other model features constant. Encouraging repeat purchases may help improve retention.
+
+- **Favourite category – Electronics (-1.1367):** Customers whose favourite category is Electronics have lower predicted log-odds of lapsing compared with the model's reference category, holding other features constant. Targeted engagement could help maintain their loyalty.
+
+- **Favourite category – Grocery (-0.4487):** Customers whose favourite category is Grocery also have lower predicted log-odds of lapsing compared with the reference category, holding other features constant. Relevant repeat-purchase offers may help maintain engagement.
+
+These negative coefficients represent associations in the fitted model, not proof that these factors directly cause lower lapse rates.
+
 
 #### Model Persistence and Retention List
 
@@ -530,6 +562,21 @@ All 19 transient errors per full run were recovered successfully.
 | Total tokens | 9,088 | 15,796 |
 | Tokens per classified ticket | 61.8 | 107.5 |
 
+
+#### Zero-Shot Confusion Matrix
+
+The zero-shot confusion matrix was calculated using the 147 tickets that received valid classifications.
+
+| Actual / Predicted | Billing | Delivery | Fraud | Technical |
+|---|---:|---:|---:|---:|
+| Billing | 38 | 0 | 0 | 0 |
+| Delivery | 0 | 36 | 0 | 0 |
+| Fraud | 11 | 0 | 23 | 0 |
+| Technical | 10 | 0 | 0 | 29 |
+
+The zero-shot classifier correctly classified 126 tickets and misclassified 21. Specifically, 11 fraud tickets and 10 technical tickets were incorrectly classified as billing. The few-shot prompt corrected these errors in the deterministic mock evaluation.
+
+
 The zero-shot prompt misclassified 11 fraud tickets and 10 technical tickets as billing. Few-shot examples corrected these errors in the mock evaluation. Although few-shot prompting required 6,708 additional tokens, it improved accuracy by 14.3 percentage points.
 
 These results reflect the deterministic synthetic mock LLM and should not be interpreted as expected real-world model performance.
@@ -591,6 +638,39 @@ The agent retrieves relevant policy information to support customer queries and 
 - **Term Frequency–Inverse Document Frequency (TF-IDF):** Combines TF and IDF to assign importance to terms based on their frequency within a document and rarity across the collection.
 
 **Limitation:** TF-IDF relies on word frequency and does not understand semantic meaning or context. It may fail to retrieve relevant policies when a customer uses synonyms or different wording from the policy documents.
+
+
+#### Retrieval Evaluation: 10-Word vs Zero Overlap
+
+Evaluated the policy retrieval system using the synthetic policy evaluation dataset in `data/raw/policy_eval.csv`.
+
+**10-Word Overlap Evaluation**
+
+The default configuration uses 40-word chunks with a 10-word overlap, producing 15 chunks from five policy documents.
+
+| Evaluation metric | Result |
+|---|---:|
+| Document retrieval | 12/12 |
+| Expected fact match | 12/12 |
+| Unanswerable fallback | 2/2 |
+| Total policy chunks | 15 |
+
+All 12 answerable questions retrieved the expected policy document and matched the expected fact. Both unanswerable questions produced the expected fallback.
+
+**Zero-Overlap Evaluation**
+
+Repeated the evaluation with the same policy documents and `overlap=0`, producing 13 chunks.
+
+The zero-overlap evaluation identified two failed questions:
+
+| Question | Expected document found | Expected fact found |
+|---|---|---|
+| What delivery time makes a completed order eligible for a full refund? | Yes | No |
+| How soon is money returned when a payment fails but is deducted? | Yes | No |
+
+Both questions retrieved the expected policy document, but the generated answers did not contain the expected facts.
+
+**Observation:** The 10-word overlap configuration passed all reported retrieval, fact-matching and fallback checks. Removing overlap resulted in two fact-matching failures, illustrating how chunk boundaries can affect the information available for answering policy questions.
 
 ### 2. Refund Agent and Tool Execution
 
@@ -675,6 +755,19 @@ The Refund Agent uses the following execution safeguards:
 In scenario S7, the agent reached the six-iteration limit without completing the request and returned `FALLBACK_MAX_ITERATIONS`.
 
 The fallback safely hands the unresolved request to human support rather than continuing indefinitely.
+
+#### Token-Limit and Timeout Demonstrations
+
+Tested the two additional fallback conditions using scenario S1.
+
+| Demonstration | Configuration | Status | LLM Calls | Tokens Used |
+|---|---|---|---:|---:|
+| Token-limit fallback | token_limit=200 | FALLBACK_TOKEN_LIMIT | 2 | 373 |
+| Timeout fallback | time_limit_seconds=0 | FALLBACK_TIMEOUT | 0 | 0 |
+
+- The token-limit demonstration stopped after exceeding 200 tokens, without executing the next requested tool.
+- The timeout demonstration stopped before the first model call.
+- Both unresolved requests were safely handed off to human support.
 
 ### 6. Output Files
 
