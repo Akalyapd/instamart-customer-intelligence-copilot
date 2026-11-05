@@ -584,6 +584,14 @@ The policy knowledge base contains 15 chunks from five policy documents:
 
 The agent retrieves relevant policy information to support customer queries and refund decisions.
 
+#### TF, IDF and TF-IDF
+
+- **Term Frequency (TF):** Measures how frequently a term appears in a document.
+- **Inverse Document Frequency (IDF):** Measures how rare a term is across the document collection, giving greater importance to less common terms.
+- **Term Frequency–Inverse Document Frequency (TF-IDF):** Combines TF and IDF to assign importance to terms based on their frequency within a document and rarity across the collection.
+
+**Limitation:** TF-IDF relies on word frequency and does not understand semantic meaning or context. It may fail to retrieve relevant policies when a customer uses synonyms or different wording from the policy documents.
+
 ### 2. Refund Agent and Tool Execution
 
 Implemented a tool-based Refund Agent in `src/agent.py`.
@@ -597,6 +605,33 @@ The agent supports:
 - Escalation to human support
 
 The agent uses the mock LLM implementation in `mock_llm.py` for deterministic evaluation.
+
+#### Tool Specifications and Execution Mapping
+
+The Refund Agent uses two structures defined in `src/agent.py`:
+
+- **TOOLS_SPEC:** Defines the tools available to the mock LLM, including their names, descriptions, parameters and required arguments.
+- **TOOL_MAP:** Maps each tool name to its corresponding Python function, allowing the agent to execute the requested tool.
+
+The five supported tools are:
+
+1. `get_order` – Retrieves order details from the SQLite database.
+2. `search_policy` – Retrieves relevant information from the policy knowledge base.
+3. `calculate_refund` – Calculates refund eligibility and amount.
+4. `issue_refund` – Issues an eligible refund and records it in the refund ledger.
+5. `escalate_to_human` – Escalates cases requiring human support.
+
+During execution, the agent passes `TOOLS_SPEC` to `mock_llm.chat()` and uses `TOOL_MAP` to execute the requested Python function.
+
+#### ReAct vs Plan-and-Execute
+
+**ReAct (Reasoning and Acting):** The agent follows an iterative process in which the language model selects a tool, executes it, receives the observation and uses the updated conversation to determine the next action.
+
+**Plan-and-Execute:** The agent first creates a structured plan of actions and then executes the planned steps. This separates planning from execution.
+
+**Approach used in this project:** The Refund Agent follows a ReAct-style tool-execution loop. In `src/agent.py`, the agent repeatedly calls `mock_llm.chat()`, executes the requested tools through `TOOL_MAP`, adds tool observations to the conversation and continues until a final answer or safety fallback is reached.
+
+This approach allows the agent to make decisions using the results of previous tool executions without requiring a separate planning stage.
 
 ### 3. Checkpointing and Resume
 
@@ -628,6 +663,18 @@ Executed seven scenarios to evaluate refund decisions and agent behaviour.
 | S7 | Fallback to human support | FALLBACK_MAX_ITERATIONS |
 
 The first six scenarios produced their expected outcomes. S7 reached the maximum iteration limit and returned a human-support fallback response.
+
+#### Agent Execution Limits and S7 Fallback
+
+The Refund Agent uses the following execution safeguards:
+
+- **Maximum iterations:** 6 model calls per agent run.
+- **Token limit:** 6,000 tokens per agent run.
+- **Timeout:** 10 seconds per agent run.
+
+In scenario S7, the agent reached the six-iteration limit without completing the request and returned `FALLBACK_MAX_ITERATIONS`.
+
+The fallback safely hands the unresolved request to human support rather than continuing indefinitely.
 
 ### 6. Output Files
 
