@@ -733,7 +733,7 @@ During execution, the agent passes `TOOLS_SPEC` to `mock_llm.chat()` and uses `T
 
 | Scenario | Result | LLM calls | Tokens used |
 |---|---|---:|---:|
-| S1 | REFUND | 5 | 1,609 |
+| S1 | REFUND | 5 | 1,612 |
 | S3 | ESCALATE | 5 | 1,596 |
 | S6 | NOT_FOUND | 2 | 343 |
 
@@ -787,8 +787,8 @@ Executed seven scenarios to evaluate refund decisions and agent behaviour.
 
 | Scenario | Expected behaviour | Observed result | Refund amount (INR) | LLM calls | Tokens used |
 |---|---|---|---:|---:|---:|
-| S1 | Eligible refund | REFUND | 128.25 | 5 | 1,609 |
-| S2 | Eligible refund | REFUND | 135.00 | 5 | 1,609 |
+| S1 | Eligible refund | REFUND | 128.25 | 5 | 1,612 |
+| S2 | Eligible refund | REFUND | 135.00 | 5 | 1,612 |
 | S3 | Human escalation | ESCALATE | 1,999.00 (escalated) | 5 | 1,596 |
 | S4 | Refund denied | DENIED | 0.00 | 4 | 1,165 |
 | S5 | Refund denied | DENIED | 0.00 | 3 | 749 |

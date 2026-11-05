@@ -88,7 +88,7 @@
             "role": "tool",
             "tool_call_id": "call_4",
             "name": "issue_refund",
-            "content": "{\"refund_inr\": 135.0}"
+            "content": "{\"refund_inr\": 135.0, \"status\": \"issued\"}"
         }
     ],
     "tokens_used": 1181,
@@ -149,7 +149,8 @@
                 "refund_inr": 135.0
             },
             "observation": {
-                "refund_inr": 135.0
+                "refund_inr": 135.0,
+                "status": "issued"
             }
         }
     ],
