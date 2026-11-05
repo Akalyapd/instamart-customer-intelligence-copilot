@@ -139,7 +139,7 @@ Audited the raw customer, product and order datasets to identify missing values,
 
 - Customers: 1,200 raw records, 61 missing ages, 6 ages outside the valid range of 10–100, and 30 missing gender values. The raw data contained 24 city spellings and 10 nonblank gender spellings that required standardisation.
 - Products: 40 raw product records. 
-- Orders: 13,084 raw records, including 119 exact duplicate rows, 656 rows with repeated order IDs, and 656 pending rows. The raw orders contained 120 nonnumeric order amounts, 2,541 missing delivery times, and 106 negative delivery times. After cleaning and deduplication, 12,309 unique order records remained.
+- Orders: 13,084 raw records, including 119 exact duplicate rows, 656 rows with repeated order IDs, and 656 pending rows. The raw orders contained 67 nonnumeric order amounts and 53 missing order amounts (120 affected entries in total), along with 2,541 missing delivery times and 106 negative delivery times. After cleaning and deduplication, 12,309 unique order records remained.
 
 
 #### Customer cleaning
