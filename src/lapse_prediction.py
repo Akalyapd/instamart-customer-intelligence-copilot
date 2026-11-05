@@ -21,6 +21,29 @@ orders = pd.read_csv(BASE_DIR / "data" / "clean" / "orders.csv")
 customers = pd.read_csv(BASE_DIR / "data" / "clean" / "customers.csv")
 products = pd.read_csv(BASE_DIR / "data" / "clean" / "products.csv")
 
+# Load raw orders separately for leakage-free delivery-time features
+raw_orders = pd.read_csv(BASE_DIR / "data" / "raw" / "orders.csv")
+
+raw_orders["order_ts"] = pd.to_datetime(
+    raw_orders["order_ts"], errors="coerce"
+)
+
+# Apply the same order deduplication rules used during data cleaning
+raw_orders = raw_orders.drop_duplicates()
+raw_orders = raw_orders.sort_values("order_ts")
+raw_orders = raw_orders.drop_duplicates(
+    subset=["order_id"], keep="last"
+)
+
+# Convert delivery times and invalidate negative values
+raw_orders["delivery_minutes"] = pd.to_numeric(
+    raw_orders["delivery_minutes"], errors="coerce"
+)
+
+raw_orders.loc[
+    raw_orders["delivery_minutes"] < 0, "delivery_minutes"
+] = float("nan")
+
 # Convert date columns
 orders["order_ts"] = pd.to_datetime(orders["order_ts"])
 customers["signup_date"] = pd.to_datetime(customers["signup_date"])
@@ -83,9 +106,45 @@ completed_features = pre_cutoff_completed.groupby("customer_id").agg(
     last_order_ts=("order_ts", "max"),
     frequency=("order_id", "nunique"),
     monetary=("order_amount", "sum"),
-    avg_discount=("discount_pct", "mean"),
-    avg_delivery=("delivery_minutes", "mean")
+    avg_discount=("discount_pct", "mean")
 ).reset_index()
+
+# Prepare delivery-time features using only pre-cutoff raw orders
+pre_cutoff_raw_completed = raw_orders[
+    (raw_orders["status"] == "completed") &
+    (raw_orders["order_ts"] < cutoff_date)
+].copy()
+
+pre_cutoff_raw_completed = pre_cutoff_raw_completed.merge(
+    products[["product_id", "category"]],
+    on="product_id",
+    how="left"
+)
+
+# Calculate category medians using pre-cutoff orders only
+pre_cutoff_category_medians = (
+    pre_cutoff_raw_completed.groupby("category")["delivery_minutes"]
+    .transform("median")
+)
+
+pre_cutoff_raw_completed["delivery_minutes"] = (
+    pre_cutoff_raw_completed["delivery_minutes"]
+    .fillna(pre_cutoff_category_medians)
+)
+
+# Calculate average delivery time for each customer
+delivery_features = (
+    pre_cutoff_raw_completed.groupby("customer_id")
+    .agg(avg_delivery=("delivery_minutes", "mean"))
+    .reset_index()
+)
+
+# Add delivery-time features to completed-order features
+completed_features = completed_features.merge(
+    delivery_features,
+    on="customer_id",
+    how="left"
+)
 
 # Recency: days from cutoff to last completed order
 completed_features["recency"] = (
