@@ -4,7 +4,7 @@ Who must approve a refund above INR 1000?,refund_policy.txt,human support lead
 How many days do I have to raise a refund request?,refund_policy.txt,within 7 days
 What is the delivery fee on small orders?,delivery_policy.txt,INR 25
 On orders of what value is delivery free?,delivery_policy.txt,INR 199 or more
-Why does the electronics delivery need a one time password?,delivery_policy.txt,one time password
+What must a customer share with the rider before an electronics item is delivered?,delivery_policy.txt,one time password
 Is cash on delivery available for a large order?,payment_policy.txt,INR 2500
 How soon is money returned when a payment fails but is deducted?,payment_policy.txt,48 hours
 Can wallet balance be refunded as cash?,payment_policy.txt,never refunded as cash
